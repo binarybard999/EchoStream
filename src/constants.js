@@ -1,1 +1,4 @@
-export const DB_NAME = "echostream";
+const DB_NAME = "echostream";
+
+
+export { DB_NAME };
