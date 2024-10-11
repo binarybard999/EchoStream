@@ -1,3 +1,61 @@
+import mongoose, { isValidObjectId } from "mongoose";
+import asyncHandler from "../utils/asyncHandler.js";
+import { ApiError } from "../utils/ApiError.js";
+import { User } from "../models/user.model.js";
+import { uploadOnCloudinary } from "../utils/fileUploadCloudinary.js";
+import { ApiResponse } from "../utils/ApiResponse.js";
+
+const getAllVideos = asyncHandler(async (req, res) => {
+    const { page = 1, limit = 10, query, sortBy, sortType, userId } = req.query;
+    // get all videos based on query, sort, pagination
+});
+
+const publishVideo = asyncHandler(async (req, res) => {
+    const { title, description } = req.body;
+    // get video, upload to cloudinary, create video
+});
+
+const getVideoById = asyncHandler(async (req, res) => {
+    const { videoId } = req.params;
+    // get video by id
+    // populate comments
+    // populate user
+    // populate likes
+    // populate dislikes
+    // populate shares
+    // populate views
+    // populate tags
+    // populate categories
+    // populate related videos
+});
+
+const updateVideo = asyncHandler(async (req, res) => {
+    const { videoId } = req.params;
+    // update video details like title, description, thumbnail
+});
+
+const deleteVideo = asyncHandler(async (req, res) => {
+    const { videoId } = req.params;
+    // delete video from db and cloudinary
+});
+
+const togglePublishStatus = asyncHandler(async (req, res) => {
+    const { videoId } = req.params;
+    // toggle publish status of video
+});
+
+export {
+    getAllVideos,
+    publishVideo,
+    getVideoById,
+    updateVideo,
+    deleteVideo,
+    togglePublishStatus,
+};
+
+
+
+/*
 // backend/controllers/video.controller.js
 import { Video } from "../models/video.model.js";
 import cloudinary from "../utils/cloudinaryConfig.js";
@@ -124,3 +182,4 @@ export const getVideoById = async (req, res) => {
         res.status(500).json({ message: "Failed to fetch video" });
     }
 };
+*/
