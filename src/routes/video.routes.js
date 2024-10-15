@@ -1,11 +1,11 @@
 import { Router } from "express";
 import {
-    deleteVideo,
     getAllVideos,
+    publishVideo,
     getVideoById,
-    publishAVideo,
-    togglePublishStatus,
     updateVideo,
+    deleteVideo,
+    togglePublishStatus,
 } from "../controllers/video.controller.js";
 import { verifyJWT } from "../middlewares/auth.middleware.js";
 import { upload } from "../middlewares/multer.middleware.js";
@@ -27,7 +27,7 @@ router
                 maxCount: 1,
             },
         ]),
-        publishAVideo
+        publishVideo
     );
 
 router
