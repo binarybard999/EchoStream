@@ -8,6 +8,7 @@ cloudinary.config({
     api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
+// Upload a file on Cloudinary and remove the local file afterwards
 const uploadOnCloudinary = async (localFilePath) => {
     try {
         if (!localFilePath) return null;
@@ -28,4 +29,29 @@ const uploadOnCloudinary = async (localFilePath) => {
     }
 };
 
-export { uploadOnCloudinary };
+// Delete a file from Cloudinary
+const deleteFromCloudinary = async (publicId) => {
+    try {
+        if (!publicId) return null;
+
+        // Delete the file from Cloudinary using its public ID
+        const response = await cloudinary.uploader.destroy(publicId);
+
+        // Check if the deletion was successful
+        if (response.result === "ok") {
+            console.log("File deleted successfully from Cloudinary");
+            return true;
+        } else {
+            console.error(
+                "Failed to delete file from Cloudinary:",
+                response.result
+            );
+            return false;
+        }
+    } catch (error) {
+        console.error("Error deleting from Cloudinary:", error.message);
+        return false;
+    }
+};
+
+export { uploadOnCloudinary, deleteFromCloudinary };
