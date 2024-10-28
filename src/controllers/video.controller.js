@@ -112,35 +112,35 @@ const getVideoById = asyncHandler(async (req, res) => {
             path: "owner",
             select: "username fullName avatar",
         })
-        .populate({
-            path: "comments",
-            populate: { path: "user", select: "username avatar" },
-        })
-        .populate("likes", "username")
-        .populate("dislikes", "username")
-        .populate("shares", "username")
-        .populate("views")
-        .populate("tags")
-        .populate("categories");
+        // .populate({
+        //     path: "comments",
+        //     populate: { path: "user", select: "username avatar" },
+        // })
+        // .populate("likes", "username")
+        // .populate("dislikes", "username")
+        // .populate("shares", "username")
+        // .populate("views")
+        // .populate("tags")
+        // .populate("categories");
 
     if (!video) {
         throw new ApiError(404, "Video not found");
     }
 
     // Optional: Populate related videos based on similar tags or categories
-    const relatedVideos = await Video.find({
-        _id: { $ne: videoId }, // Exclude the current video
-        tags: { $in: video.tags }, // Match similar tags
-        isPublished: true,
-    })
-        .limit(5)
-        .select("title thumbnail");
+    // const relatedVideos = await Video.find({
+    //     _id: { $ne: videoId }, // Exclude the current video
+    //     tags: { $in: video.tags }, // Match similar tags
+    //     isPublished: true,
+    // })
+    //     .limit(5)
+    //     .select("title thumbnail");
 
     return res
         .status(200)
         .json(
             new ApiResponse(
-                { video, relatedVideos },
+                // { video, relatedVideos },
                 "Video retrieved successfully"
             )
         );
