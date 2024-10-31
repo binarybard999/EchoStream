@@ -4,6 +4,7 @@ import { Video } from "../models/video.model.js";
 import { User } from "../models/user.model.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import { ApiError } from "../utils/ApiError.js";
+import mongoose from "mongoose";
 
 const getVideoComments = asyncHandler(async (req, res) => {
     // get all comments for a video
@@ -19,8 +20,8 @@ const getVideoComments = asyncHandler(async (req, res) => {
     // Fetch comments for the video, populate with user data, and paginate
     const comments = await Comment.aggregatePaginate(
         Comment.aggregate([
-            { $match: { video: videoId } },
-            { $sort: { createdAt: -1 } }, // Sort by latest
+            { $match: { video: mongoose.Types.ObjectId.createFromHexString(videoId) } }, // Convert videoId to ObjectId
+            { $sort: { createdAt: -1 } },
             {
                 $lookup: {
                     from: "users",
@@ -136,7 +137,7 @@ const deleteComment = asyncHandler(async (req, res) => {
     }
 
     // Delete the comment
-    await comment.remove();
+    await comment.deleteOne();
 
     return res
         .status(200)
