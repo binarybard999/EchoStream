@@ -35,6 +35,27 @@ const videoSchema = new Schema(
             type: Schema.Types.ObjectId,
             ref: "User",
         },
+        categories: [
+            {
+                type: String, // Categories like "coding", "sports", "gaming", etc.
+                enum: [
+                    "coding",
+                    "sports",
+                    "gaming",
+                    "music",
+                    "news",
+                    "travel",
+                    "food",
+                    "education",
+                    "lifestyle",
+                ],
+            },
+        ],
+        tags: [
+            {
+                type: String, // Tags for search and filtering
+            },
+        ],
     },
     { timestamps: true }
 );

@@ -3,7 +3,10 @@ import asyncHandler from "../utils/asyncHandler.js";
 import { ApiError } from "../utils/ApiError.js";
 import { User } from "../models/user.model.js";
 import { Video } from "../models/video.model.js";
-import { uploadOnCloudinary, deleteFromCloudinary } from "../utils/fileUploadCloudinary.js";
+import {
+    uploadOnCloudinary,
+    deleteFromCloudinary,
+} from "../utils/fileUploadCloudinary.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 
 const getAllVideos = asyncHandler(async (req, res) => {
@@ -49,7 +52,7 @@ const getAllVideos = asyncHandler(async (req, res) => {
 });
 
 const publishVideo = asyncHandler(async (req, res) => {
-    // get video, upload to cloudinary, create video
+    // Get video, upload to Cloudinary, create video
     const { title, description } = req.body;
     const userId = req.user._id; // Assuming you are using JWT authentication and have user info in req.user
 
@@ -62,14 +65,23 @@ const publishVideo = asyncHandler(async (req, res) => {
 
     const { videoFile, thumbnail } = req.files;
 
+    // Define folder name for user-specific uploads
+    const userFolder = `users/${req.user.username}/videos`;
+
     // Upload video file to Cloudinary
-    const videoUploadResponse = await uploadOnCloudinary(videoFile[0].path);
+    const videoUploadResponse = await uploadOnCloudinary(
+        videoFile[0].path,
+        userFolder
+    );
     if (!videoUploadResponse) {
         throw new ApiError(500, "Failed to upload video file to Cloudinary");
     }
 
     // Upload thumbnail to Cloudinary
-    const thumbnailUploadResponse = await uploadOnCloudinary(thumbnail[0].path);
+    const thumbnailUploadResponse = await uploadOnCloudinary(
+        thumbnail[0].path,
+        userFolder
+    );
     if (!thumbnailUploadResponse) {
         throw new ApiError(500, "Failed to upload thumbnail to Cloudinary");
     }
@@ -107,21 +119,20 @@ const getVideoById = asyncHandler(async (req, res) => {
         throw new ApiError(400, "Invalid video ID");
     }
 
-    const video = await Video.findById(videoId)
-        .populate({
-            path: "owner",
-            select: "username fullName avatar",
-        })
-        // .populate({
-        //     path: "comments",
-        //     populate: { path: "user", select: "username avatar" },
-        // })
-        // .populate("likes", "username")
-        // .populate("dislikes", "username")
-        // .populate("shares", "username")
-        // .populate("views")
-        // .populate("tags")
-        // .populate("categories");
+    const video = await Video.findById(videoId).populate({
+        path: "owner",
+        select: "username fullName avatar",
+    });
+    // .populate({
+    //     path: "comments",
+    //     populate: { path: "user", select: "username avatar" },
+    // })
+    // .populate("likes", "username")
+    // .populate("dislikes", "username")
+    // .populate("shares", "username")
+    // .populate("views")
+    // .populate("tags")
+    // .populate("categories");
 
     if (!video) {
         throw new ApiError(404, "Video not found");
@@ -136,18 +147,16 @@ const getVideoById = asyncHandler(async (req, res) => {
     //     .limit(5)
     //     .select("title thumbnail");
 
-    return res
-        .status(200)
-        .json(
-            new ApiResponse(
-                { video }, //{ video, relatedVideos },
-                "Video retrieved successfully"
-            )
-        );
+    return res.status(200).json(
+        new ApiResponse(
+            { video }, //{ video, relatedVideos },
+            "Video retrieved successfully"
+        )
+    );
 });
 
 const updateVideo = asyncHandler(async (req, res) => {
-    // update video details like title, description, thumbnail
+    // Update video details like title, description, thumbnail
     const { videoId } = req.params;
 
     if (!isValidObjectId(videoId)) {
@@ -156,12 +165,18 @@ const updateVideo = asyncHandler(async (req, res) => {
 
     const { title, description } = req.body;
 
+    // Define folder name for user-specific uploads
+    const userFolder = `users/${req.user.username}/videos`;
+
     // Check if a new thumbnail is uploaded
     const thumbnail = req.files?.thumbnail ? req.files.thumbnail[0].path : null;
     let thumbnailUrl = null;
 
     if (thumbnail) {
-        const thumbnailUploadResponse = await uploadOnCloudinary(thumbnail);
+        const thumbnailUploadResponse = await uploadOnCloudinary(
+            thumbnail,
+            userFolder
+        );
         if (!thumbnailUploadResponse) {
             throw new ApiError(
                 500,
@@ -191,7 +206,7 @@ const updateVideo = asyncHandler(async (req, res) => {
 });
 
 const deleteVideo = asyncHandler(async (req, res) => {
-    // delete video from db and cloudinary
+    // Delete video from DB and Cloudinary
     const { videoId } = req.params;
     if (!isValidObjectId(videoId)) {
         throw new ApiError(400, "Invalid video ID");
@@ -248,6 +263,79 @@ const togglePublishStatus = asyncHandler(async (req, res) => {
         );
 });
 
+// Add a new video category
+const addCategory = asyncHandler(async (req, res) => {
+    const { videoId, category } = req.body;
+
+    if (!videoId || !category) {
+        throw new ApiError(400, "Video ID and category are required.");
+    }
+
+    if (!isValidObjectId(videoId)) {
+        throw new ApiError(400, "Invalid video ID.");
+    }
+
+    const video = await Video.findById(videoId);
+    if (!video) {
+        throw new ApiError(404, "Video not found.");
+    }
+
+    if (!video.categories.includes(category)) {
+        video.categories.push(category);
+    }
+    await video.save();
+
+    return res
+        .status(200)
+        .json(new ApiResponse(200, video, "Category added successfully"));
+});
+
+// Add a new tag to the video
+const addTag = asyncHandler(async (req, res) => {
+    const { videoId, tag } = req.body;
+
+    if (!videoId || !tag) {
+        throw new ApiError(400, "Video ID and tag are required.");
+    }
+
+    if (!isValidObjectId(videoId)) {
+        throw new ApiError(400, "Invalid video ID.");
+    }
+
+    const video = await Video.findById(videoId);
+    if (!video) {
+        throw new ApiError(404, "Video not found.");
+    }
+
+    if (!video.tags.includes(tag)) {
+        video.tags.push(tag);
+    }
+    await video.save();
+
+    return res
+        .status(200)
+        .json(new ApiResponse(200, video, "Tag added successfully"));
+});
+
+// Get videos by category
+const getVideosByCategory = asyncHandler(async (req, res) => {
+    const { category } = req.params;
+
+    const videos = await Video.find({ categories: category }).sort({
+        createdAt: -1,
+    });
+
+    return res
+        .status(200)
+        .json(
+            new ApiResponse(
+                200,
+                videos,
+                "Videos by category retrieved successfully"
+            )
+        );
+});
+
 export {
     getAllVideos,
     publishVideo,
@@ -255,133 +343,7 @@ export {
     updateVideo,
     deleteVideo,
     togglePublishStatus,
+    addCategory,
+    addTag,
+    getVideosByCategory,
 };
-
-/*
-// backend/controllers/video.controller.js
-import { Video } from "../models/video.model.js";
-import cloudinary from "../utils/cloudinaryConfig.js";
-import { convertVideo } from "../utils/videoConverter.js";
-import fs from "fs";
-import path from "path";
-
-// Upload Video Controller
-export const uploadVideo = async (req, res) => {
-    try {
-        // Video file path after being uploaded by multer
-        const videoFilePath = req.file.path;
-
-        // Convert video to 480p, 720p, and 1080p
-        const [video480p, video720p, video1080p] = await Promise.all([
-            convertVideo(
-                videoFilePath,
-                "640x480",
-                `output_480p_${req.file.filename}`
-            ),
-            convertVideo(
-                videoFilePath,
-                "1280x720",
-                `output_720p_${req.file.filename}`
-            ),
-            convertVideo(
-                videoFilePath,
-                "1920x1080",
-                `output_1080p_${req.file.filename}`
-            ),
-        ]);
-
-        // Upload videos to Cloudinary
-        const [cloud480p, cloud720p, cloud1080p] = await Promise.all([
-            cloudinary.uploader.upload(video480p, {
-                resource_type: "video",
-                folder: "videos",
-            }),
-            cloudinary.uploader.upload(video720p, {
-                resource_type: "video",
-                folder: "videos",
-            }),
-            cloudinary.uploader.upload(video1080p, {
-                resource_type: "video",
-                folder: "videos",
-            }),
-        ]);
-
-        // Upload thumbnail to Cloudinary (for simplicity, assuming the thumbnail comes with the request)
-        const thumbnailUpload = await cloudinary.uploader.upload(
-            req.body.thumbnail,
-            { folder: "thumbnails" }
-        );
-
-        // Save video data to MongoDB
-        const newVideo = new Video({
-            videoFile: cloud720p.secure_url, // Using the 720p version as the default
-            thumbnail: thumbnailUpload.secure_url,
-            title: req.body.title,
-            description: req.body.description,
-            duration: cloud720p.duration, // Duration is returned from Cloudinary video upload response
-            owner: req.user._id, // Assuming authentication middleware adds `req.user`
-        });
-
-        const savedVideo = await newVideo.save();
-
-        // Delete temporary files
-        fs.unlinkSync(videoFilePath);
-        fs.unlinkSync(video480p);
-        fs.unlinkSync(video720p);
-        fs.unlinkSync(video1080p);
-
-        res.status(201).json({
-            message: "Video uploaded successfully",
-            video: savedVideo,
-            videos: {
-                lowRes: cloud480p.secure_url,
-                medRes: cloud720p.secure_url,
-                highRes: cloud1080p.secure_url,
-            },
-        });
-    } catch (error) {
-        console.error("Error uploading video:", error);
-        res.status(500).json({ message: "Video upload failed" });
-    }
-};
-
-// Get All Videos (with Pagination)
-export const getAllVideos = async (req, res) => {
-    try {
-        const page = parseInt(req.query.page) || 1;
-        const limit = parseInt(req.query.limit) || 10;
-
-        const aggregate = Video.aggregate([
-            { $match: { isPublished: true } },
-            { $sort: { createdAt: -1 } },
-        ]);
-
-        const options = { page, limit };
-        const videos = await Video.aggregatePaginate(aggregate, options);
-
-        res.json(videos);
-    } catch (error) {
-        console.error("Error fetching videos:", error);
-        res.status(500).json({ message: "Failed to fetch videos" });
-    }
-};
-
-// Get Video by ID
-export const getVideoById = async (req, res) => {
-    try {
-        const video = await Video.findById(req.params.id).populate(
-            "owner",
-            "name"
-        );
-
-        if (!video) {
-            return res.status(404).json({ message: "Video not found" });
-        }
-
-        res.json(video);
-    } catch (error) {
-        console.error("Error fetching video by ID:", error);
-        res.status(500).json({ message: "Failed to fetch video" });
-    }
-};
-*/
