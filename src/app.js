@@ -1,8 +1,10 @@
 import express from "express";
 import cors from "cors";
 import cookieParser from "cookie-parser";
+import { createServer } from "http"; // Import to create an HTTP server
 
 const app = express();
+const httpServer = createServer(app);
 
 app.use(
     cors({
@@ -50,4 +52,4 @@ app.use("/api/v1/likes", likeRouter);
 app.use("/api/v1/playlist", playlistRouter);
 app.use("/api/v1/dashboard", dashboardRouter);
 
-export { app };
+export { app, httpServer };

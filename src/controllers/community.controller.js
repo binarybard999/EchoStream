@@ -4,7 +4,8 @@ import { User } from "../models/user.model.js";
 import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import asyncHandler from "../utils/asyncHandler.js";
-import { uploadOnCloudinary } from "../utils/cloudinaryHelper.js";
+import { uploadOnCloudinary, deleteFromCloudinary } from "../utils/fileUploadCloudinary.js";
+import { io } from "../utils/socket.js"; // Import Socket.io instance
 
 // Core Functions for Community Management
 /**
@@ -38,6 +39,9 @@ const createCommunity = asyncHandler(async (req, res) => {
         owner: req.user._id,
         avatar: avatar.url,
     });
+
+    // Emit an event using Socket.io to update all clients
+    io.emit("newCommunity", community);
 
     return res
         .status(201)
@@ -90,6 +94,9 @@ const editCommunity = asyncHandler(async (req, res) => {
 
     await community.save();
 
+    // Emit an event using Socket.io to notify about the community update
+    io.to(communityId).emit("communityUpdated", community);
+
     return res
         .status(200)
         .json(
@@ -121,6 +128,9 @@ const deleteCommunity = asyncHandler(async (req, res) => {
     // Delete the community from the database
     await community.deleteOne();
 
+    // Emit an event using Socket.io to notify all clients about the deletion
+    io.emit("communityDeleted", communityId);
+
     return res
         .status(200)
         .json(new ApiResponse(200, null, "Community deleted successfully."));
@@ -146,11 +156,17 @@ const addCommunityAvatar = asyncHandler(async (req, res) => {
 
     // Check if the user is the owner
     if (community.owner.toString() !== req.user._id.toString()) {
-        throw new ApiError(403, "You are not authorized to update this community's avatar.");
+        throw new ApiError(
+            403,
+            "You are not authorized to update this community's avatar."
+        );
     }
 
     // Upload the new avatar to Cloudinary
-    const avatar = await uploadOnCloudinary(avatarLocalPath, `communities/${community.name}`);
+    const avatar = await uploadOnCloudinary(
+        avatarLocalPath,
+        `communities/${community.name}`
+    );
     if (!avatar) {
         throw new ApiError(500, "Failed to upload avatar to Cloudinary.");
     }
@@ -159,9 +175,18 @@ const addCommunityAvatar = asyncHandler(async (req, res) => {
     community.avatar = avatar.url;
     await community.save();
 
+    // Emit an event using Socket.io to notify about the avatar update
+    io.to(communityId).emit("avatarUpdated", community);
+
     return res
         .status(200)
-        .json(new ApiResponse(200, community, "Community avatar updated successfully."));
+        .json(
+            new ApiResponse(
+                200,
+                community,
+                "Community avatar updated successfully."
+            )
+        );
 });
 
 // Member Management Functions
@@ -179,17 +204,30 @@ const joinCommunity = asyncHandler(async (req, res) => {
     }
 
     // Check if the user is already a member
-    if (community.members.includes(req.user._id)) {
+    if (
+        community.members.some(
+            (member) => member.user.toString() === req.user._id.toString()
+        )
+    ) {
         throw new ApiError(400, "You are already a member of this community.");
     }
 
     // Add the user to the community's members list
-    community.members.push(req.user._id);
+    community.members.push({ user: req.user._id });
     await community.save();
+
+    // Notify all members that a new user has joined
+    io.to(communityId).emit("memberJoined", { userId: req.user._id });
 
     return res
         .status(200)
-        .json(new ApiResponse(200, community, "Joined the community successfully."));
+        .json(
+            new ApiResponse(
+                200,
+                community,
+                "Joined the community successfully."
+            )
+        );
 });
 
 /**
@@ -206,19 +244,28 @@ const leaveCommunity = asyncHandler(async (req, res) => {
     }
 
     // Check if the user is a member of the community
-    if (!community.members.includes(req.user._id)) {
+    if (
+        !community.members.some(
+            (member) => member.user.toString() === req.user._id.toString()
+        )
+    ) {
         throw new ApiError(400, "You are not a member of this community.");
     }
 
     // Remove the user from the community's members list
     community.members = community.members.filter(
-        (memberId) => memberId.toString() !== req.user._id.toString()
+        (member) => member.user.toString() !== req.user._id.toString()
     );
     await community.save();
 
+    // Notify all members that a user has left
+    io.to(communityId).emit("memberLeft", { userId: req.user._id });
+
     return res
         .status(200)
-        .json(new ApiResponse(200, community, "Left the community successfully."));
+        .json(
+            new ApiResponse(200, community, "Left the community successfully.")
+        );
 });
 
 /**
@@ -228,8 +275,11 @@ const leaveCommunity = asyncHandler(async (req, res) => {
 const removeUserFromCommunity = asyncHandler(async (req, res) => {
     const { communityId, userId } = req.params;
 
-    // Check if the IDs are valid
-    if (!mongoose.Types.ObjectId.isValid(communityId) || !mongoose.Types.ObjectId.isValid(userId)) {
+    // Validate the IDs
+    if (
+        !mongoose.Types.ObjectId.isValid(communityId) ||
+        !mongoose.Types.ObjectId.isValid(userId)
+    ) {
         throw new ApiError(400, "Invalid community or user ID.");
     }
 
@@ -241,21 +291,40 @@ const removeUserFromCommunity = asyncHandler(async (req, res) => {
 
     // Check if the requester is the community owner
     if (community.owner.toString() !== req.user._id.toString()) {
-        throw new ApiError(403, "You are not authorized to remove members from this community.");
+        throw new ApiError(
+            403,
+            "You are not authorized to remove members from this community."
+        );
     }
 
     // Check if the user is a member
-    if (!community.members.includes(userId)) {
-        throw new ApiError(400, "The specified user is not a member of this community.");
+    if (
+        !community.members.some((member) => member.user.toString() === userId)
+    ) {
+        throw new ApiError(
+            400,
+            "The specified user is not a member of this community."
+        );
     }
 
     // Remove the user from the members list
-    community.members = community.members.filter((memberId) => memberId.toString() !== userId);
+    community.members = community.members.filter(
+        (member) => member.user.toString() !== userId
+    );
     await community.save();
+
+    // Notify all members that a user has been removed
+    io.to(communityId).emit("memberRemoved", { userId });
 
     return res
         .status(200)
-        .json(new ApiResponse(200, community, "User removed from the community successfully."));
+        .json(
+            new ApiResponse(
+                200,
+                community,
+                "User removed from the community successfully."
+            )
+        );
 });
 
 /**
@@ -265,8 +334,11 @@ const removeUserFromCommunity = asyncHandler(async (req, res) => {
 const makeAdmin = asyncHandler(async (req, res) => {
     const { communityId, userId } = req.params;
 
-    // Check if the IDs are valid
-    if (!mongoose.Types.ObjectId.isValid(communityId) || !mongoose.Types.ObjectId.isValid(userId)) {
+    // Validate the IDs
+    if (
+        !mongoose.Types.ObjectId.isValid(communityId) ||
+        !mongoose.Types.ObjectId.isValid(userId)
+    ) {
         throw new ApiError(400, "Invalid community or user ID.");
     }
 
@@ -278,7 +350,10 @@ const makeAdmin = asyncHandler(async (req, res) => {
 
     // Check if the requester is the community owner
     if (community.owner.toString() !== req.user._id.toString()) {
-        throw new ApiError(403, "You are not authorized to make users admin in this community.");
+        throw new ApiError(
+            403,
+            "You are not authorized to make users admin in this community."
+        );
     }
 
     // Check if the user is already an admin
@@ -290,9 +365,18 @@ const makeAdmin = asyncHandler(async (req, res) => {
     community.admins.push(userId);
     await community.save();
 
+    // Notify all members that a user has been made an admin
+    io.to(communityId).emit("adminAdded", { userId });
+
     return res
         .status(200)
-        .json(new ApiResponse(200, community, "User has been made an admin successfully."));
+        .json(
+            new ApiResponse(
+                200,
+                community,
+                "User has been made an admin successfully."
+            )
+        );
 });
 
 /**
@@ -302,8 +386,11 @@ const makeAdmin = asyncHandler(async (req, res) => {
 const revokeAdmin = asyncHandler(async (req, res) => {
     const { communityId, userId } = req.params;
 
-    // Check if the IDs are valid
-    if (!mongoose.Types.ObjectId.isValid(communityId) || !mongoose.Types.ObjectId.isValid(userId)) {
+    // Validate the IDs
+    if (
+        !mongoose.Types.ObjectId.isValid(communityId) ||
+        !mongoose.Types.ObjectId.isValid(userId)
+    ) {
         throw new ApiError(400, "Invalid community or user ID.");
     }
 
@@ -315,7 +402,10 @@ const revokeAdmin = asyncHandler(async (req, res) => {
 
     // Check if the requester is the community owner
     if (community.owner.toString() !== req.user._id.toString()) {
-        throw new ApiError(403, "You are not authorized to revoke admin status in this community.");
+        throw new ApiError(
+            403,
+            "You are not authorized to revoke admin status in this community."
+        );
     }
 
     // Check if the user is an admin
@@ -324,12 +414,23 @@ const revokeAdmin = asyncHandler(async (req, res) => {
     }
 
     // Remove the user from the admins list
-    community.admins = community.admins.filter((adminId) => adminId.toString() !== userId);
+    community.admins = community.admins.filter(
+        (adminId) => adminId.toString() !== userId
+    );
     await community.save();
+
+    // Notify the community about the admin revocation
+    io.to(communityId).emit("adminRevoked", { userId });
 
     return res
         .status(200)
-        .json(new ApiResponse(200, community, "Admin status has been revoked successfully."));
+        .json(
+            new ApiResponse(
+                200,
+                community,
+                "Admin status has been revoked successfully."
+            )
+        );
 });
 
 // Chat Management Functions
@@ -349,7 +450,11 @@ const sendMessage = asyncHandler(async (req, res) => {
     }
 
     // Check if the user is a member of the community
-    if (!community.members.includes(userId)) {
+    if (
+        !community.members.some(
+            (member) => member.user.toString() === userId.toString()
+        )
+    ) {
         throw new ApiError(403, "You are not a member of this community.");
     }
 
@@ -357,11 +462,17 @@ const sendMessage = asyncHandler(async (req, res) => {
     let imageUrl = null;
     let videoUrl = null;
     if (req.files?.image) {
-        const imageUpload = await uploadOnCloudinary(req.files.image[0].path, `communities/${communityId}/images`);
+        const imageUpload = await uploadOnCloudinary(
+            req.files.image[0].path,
+            `communities/${communityId}/images`
+        );
         imageUrl = imageUpload.url;
     }
     if (req.files?.video) {
-        const videoUpload = await uploadOnCloudinary(req.files.video[0].path, `communities/${communityId}/videos`);
+        const videoUpload = await uploadOnCloudinary(
+            req.files.video[0].path,
+            `communities/${communityId}/videos`
+        );
         videoUrl = videoUpload.url;
     }
 
@@ -373,6 +484,9 @@ const sendMessage = asyncHandler(async (req, res) => {
         image: imageUrl,
         video: videoUrl,
     });
+
+    // Notify all members in real-time
+    io.to(communityId).emit("newMessage", chatMessage);
 
     return res
         .status(201)
@@ -400,16 +514,26 @@ const deleteMessage = asyncHandler(async (req, res) => {
     }
 
     // Check if the requester is the message owner, community owner, or an admin
-    const isAuthorized = chatMessage.sender.toString() === userId.toString()
-        || community.owner.toString() === userId.toString()
-        || community.admins.includes(userId);
+    const isAuthorized =
+        chatMessage.sender.toString() === userId.toString() ||
+        community.owner.toString() === userId.toString() ||
+        community.admins.includes(userId);
     if (!isAuthorized) {
-        throw new ApiError(403, "You are not authorized to delete this message.");
+        throw new ApiError(
+            403,
+            "You are not authorized to delete this message."
+        );
     }
 
     // Delete the message
     await chatMessage.deleteOne();
-    return res.status(200).json(new ApiResponse(200, null, "Message deleted successfully."));
+
+    // Notify all members in real-time
+    io.to(communityId).emit("messageDeleted", { messageId });
+
+    return res
+        .status(200)
+        .json(new ApiResponse(200, null, "Message deleted successfully."));
 });
 
 /**
@@ -435,7 +559,13 @@ const getCommunityChats = asyncHandler(async (req, res) => {
 
     return res
         .status(200)
-        .json(new ApiResponse(200, chats, "Community chats retrieved successfully."));
+        .json(
+            new ApiResponse(
+                200,
+                chats,
+                "Community chats retrieved successfully."
+            )
+        );
 });
 
 /**
@@ -468,9 +598,155 @@ const editMessage = asyncHandler(async (req, res) => {
     chatMessage.content = content;
     await chatMessage.save();
 
+    // Notify all members in real-time
+    io.to(communityId).emit("messageEdited", { messageId, content });
+
     return res
         .status(200)
-        .json(new ApiResponse(200, chatMessage, "Message edited successfully."));
+        .json(
+            new ApiResponse(200, chatMessage, "Message edited successfully.")
+        );
 });
 
-export { createCommunity, editCommunity, deleteCommunity, addCommunityAvatar, joinCommunity, leaveCommunity, removeUserFromCommunity, makeAdmin, revokeAdmin, sendMessage, deleteMessage, getCommunityChats, editMessage };
+// Community Information and Search Functions
+/**
+ * 14. Get Community Details
+ * @route GET /api/communities/:communityId
+ * @desc Retrieves details of a specific community
+ */
+const getCommunityDetails = asyncHandler(async (req, res) => {
+    const { communityId } = req.params;
+
+    // Check if the community ID is valid
+    if (!mongoose.Types.ObjectId.isValid(communityId)) {
+        throw new ApiError(400, "Invalid community ID.");
+    }
+
+    // Find the community and populate owner and members
+    const community = await Community.findById(communityId)
+        .populate("owner", "username avatar")
+        .populate("members.user", "username avatar");
+
+    if (!community) {
+        throw new ApiError(404, "Community not found.");
+    }
+
+    return res
+        .status(200)
+        .json(
+            new ApiResponse(
+                200,
+                community,
+                "Community details retrieved successfully."
+            )
+        );
+});
+
+/**
+ * 15. Search Communities
+ * @route GET /api/communities/search
+ * @desc Searches for communities based on a query string
+ */
+const searchCommunities = asyncHandler(async (req, res) => {
+    const { query } = req.query;
+
+    if (!query || query.trim() === "") {
+        throw new ApiError(400, "Query string is required.");
+    }
+
+    // Search for communities where the name or description matches the query
+    const communities = await Community.find({
+        $or: [
+            { name: { $regex: query, $options: "i" } }, // Case-insensitive search
+            { description: { $regex: query, $options: "i" } },
+        ],
+    });
+
+    return res
+        .status(200)
+        .json(
+            new ApiResponse(
+                200,
+                communities,
+                "Communities retrieved successfully."
+            )
+        );
+});
+
+/**
+ * 16. List User Communities
+ * @route GET /api/users/:userId/communities
+ * @desc Retrieves a list of all communities that a user has joined
+ */
+const listUserCommunities = asyncHandler(async (req, res) => {
+    const { userId } = req.params;
+
+    // Check if the user ID is valid
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+        throw new ApiError(400, "Invalid user ID.");
+    }
+
+    // Find communities where the user is a member
+    const communities = await Community.find({ "members.user": userId });
+
+    return res
+        .status(200)
+        .json(
+            new ApiResponse(
+                200,
+                communities,
+                "User communities retrieved successfully."
+            )
+        );
+});
+
+/**
+ * 17. List All Communities
+ * @route GET /api/communities
+ * @desc Retrieves a paginated list of all communities for exploration or browsing
+ */
+const listAllCommunities = asyncHandler(async (req, res) => {
+    const { page = 1, limit = 10 } = req.query;
+
+    // Pagination options
+    const options = {
+        page: parseInt(page, 10),
+        limit: parseInt(limit, 10),
+        sort: { createdAt: -1 }, // Sort by creation date, newest first
+    };
+
+    // Use Mongoose's `paginate` method
+    const communities = await Community.paginate({}, options);
+
+    return res
+        .status(200)
+        .json(
+            new ApiResponse(
+                200,
+                communities,
+                "All communities retrieved successfully."
+            )
+        );
+});
+
+// some functions are remaining i.e. Media Management Functions using websockets
+
+export {
+    createCommunity,
+    editCommunity,
+    deleteCommunity,
+    addCommunityAvatar,
+    joinCommunity,
+    leaveCommunity,
+    removeUserFromCommunity,
+    makeAdmin,
+    revokeAdmin,
+    sendMessage,
+    deleteMessage,
+    getCommunityChats,
+    editMessage,
+    getCommunityDetails,
+    searchCommunities,
+    listUserCommunities,
+    listAllCommunities,
+};
