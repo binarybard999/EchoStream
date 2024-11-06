@@ -4,8 +4,12 @@ import { User } from "../models/user.model.js";
 import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import asyncHandler from "../utils/asyncHandler.js";
-import { uploadOnCloudinary, deleteFromCloudinary } from "../utils/fileUploadCloudinary.js";
-import { io } from "../utils/socket.js"; // Import Socket.io instance
+import {
+    uploadOnCloudinary,
+    deleteFromCloudinary,
+    deleteFolderFromCloudinary
+} from "../utils/fileUploadCloudinary.js";
+import { getSocketInstance } from "../utils/socket.js"; // Import Socket.io instance
 
 // Core Functions for Community Management
 /**
@@ -41,6 +45,7 @@ const createCommunity = asyncHandler(async (req, res) => {
     });
 
     // Emit an event using Socket.io to update all clients
+    const io = getSocketInstance();
     io.emit("newCommunity", community);
 
     return res
@@ -95,6 +100,7 @@ const editCommunity = asyncHandler(async (req, res) => {
     await community.save();
 
     // Emit an event using Socket.io to notify about the community update
+    const io = getSocketInstance();
     io.to(communityId).emit("communityUpdated", community);
 
     return res
@@ -129,6 +135,7 @@ const deleteCommunity = asyncHandler(async (req, res) => {
     await community.deleteOne();
 
     // Emit an event using Socket.io to notify all clients about the deletion
+    const io = getSocketInstance();
     io.emit("communityDeleted", communityId);
 
     return res
@@ -176,6 +183,7 @@ const addCommunityAvatar = asyncHandler(async (req, res) => {
     await community.save();
 
     // Emit an event using Socket.io to notify about the avatar update
+    const io = getSocketInstance();
     io.to(communityId).emit("avatarUpdated", community);
 
     return res
@@ -217,6 +225,7 @@ const joinCommunity = asyncHandler(async (req, res) => {
     await community.save();
 
     // Notify all members that a new user has joined
+    const io = getSocketInstance();
     io.to(communityId).emit("memberJoined", { userId: req.user._id });
 
     return res
@@ -259,6 +268,7 @@ const leaveCommunity = asyncHandler(async (req, res) => {
     await community.save();
 
     // Notify all members that a user has left
+    const io = getSocketInstance();
     io.to(communityId).emit("memberLeft", { userId: req.user._id });
 
     return res
@@ -314,6 +324,7 @@ const removeUserFromCommunity = asyncHandler(async (req, res) => {
     await community.save();
 
     // Notify all members that a user has been removed
+    const io = getSocketInstance();
     io.to(communityId).emit("memberRemoved", { userId });
 
     return res
@@ -366,6 +377,7 @@ const makeAdmin = asyncHandler(async (req, res) => {
     await community.save();
 
     // Notify all members that a user has been made an admin
+    const io = getSocketInstance();
     io.to(communityId).emit("adminAdded", { userId });
 
     return res
@@ -420,6 +432,7 @@ const revokeAdmin = asyncHandler(async (req, res) => {
     await community.save();
 
     // Notify the community about the admin revocation
+    const io = getSocketInstance();
     io.to(communityId).emit("adminRevoked", { userId });
 
     return res
@@ -486,6 +499,7 @@ const sendMessage = asyncHandler(async (req, res) => {
     });
 
     // Notify all members in real-time
+    const io = getSocketInstance();
     io.to(communityId).emit("newMessage", chatMessage);
 
     return res
@@ -529,6 +543,7 @@ const deleteMessage = asyncHandler(async (req, res) => {
     await chatMessage.deleteOne();
 
     // Notify all members in real-time
+    const io = getSocketInstance();
     io.to(communityId).emit("messageDeleted", { messageId });
 
     return res
@@ -599,6 +614,7 @@ const editMessage = asyncHandler(async (req, res) => {
     await chatMessage.save();
 
     // Notify all members in real-time
+    const io = getSocketInstance();
     io.to(communityId).emit("messageEdited", { messageId, content });
 
     return res
@@ -729,7 +745,179 @@ const listAllCommunities = asyncHandler(async (req, res) => {
         );
 });
 
-// some functions are remaining i.e. Media Management Functions using websockets
+// Media Management Functions
+/**
+ * 18. Upload Image to Chat
+ * @route POST /api/communities/:communityId/chat/upload-image
+ * @desc Handles the upload of images in a chat message
+ */
+const uploadImageToChat = asyncHandler(async (req, res) => {
+    const { communityId } = req.params;
+    const userId = req.user._id;
+    const imageFilePath = req.files?.image?.[0]?.path;
+
+    if (!imageFilePath) {
+        throw new ApiError(400, "Image file is required.");
+    }
+
+    // Check if the community exists
+    const community = await Community.findById(communityId);
+    if (!community) {
+        throw new ApiError(404, "Community not found.");
+    }
+
+    // Check if the user is a member of the community
+    if (
+        !community.members.some(
+            (member) => member.user.toString() === userId.toString()
+        )
+    ) {
+        throw new ApiError(403, "You are not a member of this community.");
+    }
+
+    // Upload the image to Cloudinary
+    const imageUpload = await uploadOnCloudinary(
+        imageFilePath,
+        `communities/${communityId}/images`
+    );
+    if (!imageUpload) {
+        throw new ApiError(500, "Failed to upload image to Cloudinary.");
+    }
+
+    // Create a new chat message in the database
+    const chatMessage = await Chat.create({
+        community: communityId,
+        sender: userId,
+        image: imageUpload.url,
+    });
+
+    // Emit the new message to all members of the community via socket.io
+    const io = getSocketInstance();
+    io.to(communityId).emit("newMessage", {
+        message: chatMessage,
+        type: "image",
+    });
+
+    return res
+        .status(200)
+        .json(
+            new ApiResponse(
+                200,
+                { imageUrl: imageUpload.url },
+                "Image uploaded successfully."
+            )
+        );
+});
+
+/**
+ * 19. Upload Video to Chat
+ * @route POST /api/communities/:communityId/chat/upload-video
+ * @desc Handles the upload of small videos in a chat message
+ */
+const uploadVideoToChat = asyncHandler(async (req, res) => {
+    const { communityId } = req.params;
+    const userId = req.user._id;
+    const videoFilePath = req.files?.video?.[0]?.path;
+
+    if (!videoFilePath) {
+        throw new ApiError(400, "Video file is required.");
+    }
+
+    // Check if the community exists
+    const community = await Community.findById(communityId);
+    if (!community) {
+        throw new ApiError(404, "Community not found.");
+    }
+
+    // Check if the user is a member of the community
+    if (
+        !community.members.some(
+            (member) => member.user.toString() === userId.toString()
+        )
+    ) {
+        throw new ApiError(403, "You are not a member of this community.");
+    }
+
+    // Upload the video to Cloudinary
+    const videoUpload = await uploadOnCloudinary(
+        videoFilePath,
+        `communities/${communityId}/videos`
+    );
+    if (!videoUpload) {
+        throw new ApiError(500, "Failed to upload video to Cloudinary.");
+    }
+
+    // Create a new chat message in the database
+    const chatMessage = await Chat.create({
+        community: communityId,
+        sender: userId,
+        video: videoUpload.url,
+    });
+
+    // Emit the new message to all members of the community via socket.io
+    const io = getSocketInstance();
+    io.to(communityId).emit("newMessage", {
+        message: chatMessage,
+        type: "video",
+    });
+
+    return res
+        .status(200)
+        .json(
+            new ApiResponse(
+                200,
+                { videoUrl: videoUpload.url },
+                "Video uploaded successfully."
+            )
+        );
+});
+
+/**
+ * 20. Delete Community Media
+ * @route DELETE /api/communities/:communityId/media
+ * @desc Deletes all media files related to a community from Cloudinary
+ */
+const deleteCommunityMedia = asyncHandler(async (req, res) => {
+    const { communityId } = req.params;
+
+    // Check if the community exists
+    const community = await Community.findById(communityId);
+    if (!community) {
+        throw new ApiError(404, "Community not found.");
+    }
+
+    // Check if the requester is the community owner
+    if (community.owner.toString() !== req.user._id.toString()) {
+        throw new ApiError(
+            403,
+            "You are not authorized to delete media from this community."
+        );
+    }
+
+    // Delete the entire folder from Cloudinary
+    const deleteSuccess = await deleteFolderFromCloudinary(
+        `communities/${communityId}`
+    );
+    if (!deleteSuccess) {
+        throw new ApiError(500, "Failed to delete media from Cloudinary.");
+    }
+
+    // Notify members that all media has been deleted
+    const io = getSocketInstance();
+    io.to(communityId).emit("mediaDeleted", {
+        message: "All community media has been deleted.",
+    });
+
+    return res
+        .status(200)
+        .json(
+            new ApiResponse(
+                200,
+                null,
+                "All community media deleted successfully."
+            )
+        );
+});
 
 export {
     createCommunity,
@@ -749,4 +937,7 @@ export {
     searchCommunities,
     listUserCommunities,
     listAllCommunities,
+    uploadImageToChat,
+    uploadVideoToChat,
+    deleteCommunityMedia,
 };

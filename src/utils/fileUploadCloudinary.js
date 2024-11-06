@@ -1,7 +1,7 @@
 import { v2 as cloudinary } from "cloudinary";
 import fs from "fs";
 
-// Configuration
+// Cloudinary Configuration
 cloudinary.config({
     cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
     api_key: process.env.CLOUDINARY_API_KEY,
@@ -9,9 +9,9 @@ cloudinary.config({
 });
 
 /**
- * Upload a file to Cloudinary under a user-specific folder and remove the local file afterwards.
+ * Upload a file to Cloudinary under a specific folder and remove the local file afterwards.
  * @param {String} localFilePath - The path to the local file.
- * @param {String} folder - The name of the folder for user-specific uploads.
+ * @param {String} folder - The name of the folder for specific uploads.
  * @returns {Object|null} - The response from Cloudinary or null if an error occurs.
  */
 const uploadOnCloudinary = async (localFilePath, folder) => {
@@ -20,7 +20,7 @@ const uploadOnCloudinary = async (localFilePath, folder) => {
 
         // Upload the file to Cloudinary under the specified folder
         const response = await cloudinary.uploader.upload(localFilePath, {
-            folder, // Use the folder name if provided
+            folder, // Use the folder name for uploads
             resource_type: "auto",
         });
 
@@ -29,7 +29,8 @@ const uploadOnCloudinary = async (localFilePath, folder) => {
 
         return response;
     } catch (error) {
-        fs.unlinkSync(localFilePath); // Remove the temporary file on error
+        // Remove the temporary file on error and log the issue
+        fs.unlinkSync(localFilePath);
         console.error("Error uploading to Cloudinary:", error.message);
         return null;
     }
@@ -47,7 +48,6 @@ const deleteFromCloudinary = async (publicId) => {
         // Delete the file from Cloudinary using its public ID
         const response = await cloudinary.uploader.destroy(publicId);
 
-        // Check if the deletion was successful
         if (response.result === "ok") {
             console.log("File deleted successfully from Cloudinary");
             return true;
@@ -65,18 +65,18 @@ const deleteFromCloudinary = async (publicId) => {
 };
 
 /**
- * Delete all resources in a user's folder and then delete the folder.
+ * Delete all resources in a folder and then delete the folder from Cloudinary.
  * @param {String} folderPath - The path of the folder to delete (e.g., "users/username").
  * @returns {Boolean} - True if the deletion was successful, false otherwise.
  */
-const deleteUserFolderFromCloudinary = async (folderPath) => {
+const deleteFolderFromCloudinary = async (folderPath) => {
     try {
         if (!folderPath) return false;
 
         // Delete all resources in the specified folder
         await cloudinary.api.delete_resources_by_prefix(folderPath);
 
-        // Delete the folder itself
+        // Delete the folder itself from Cloudinary
         await cloudinary.api.delete_folder(folderPath);
 
         console.log(`Successfully deleted Cloudinary folder: ${folderPath}`);
@@ -87,11 +87,7 @@ const deleteUserFolderFromCloudinary = async (folderPath) => {
     }
 };
 
-export {
-    uploadOnCloudinary,
-    deleteFromCloudinary,
-    deleteUserFolderFromCloudinary,
-};
+export { uploadOnCloudinary, deleteFromCloudinary, deleteFolderFromCloudinary };
 
 // import { v2 as cloudinary } from "cloudinary";
 // import fs from "fs";
