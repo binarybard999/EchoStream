@@ -7,7 +7,7 @@ import asyncHandler from "../utils/asyncHandler.js";
 import {
     uploadOnCloudinary,
     deleteFromCloudinary,
-    deleteFolderFromCloudinary
+    deleteFolderFromCloudinary,
 } from "../utils/fileUploadCloudinary.js";
 import { getSocketInstance } from "../utils/socket.js"; // Import Socket.io instance
 
@@ -724,15 +724,18 @@ const listUserCommunities = asyncHandler(async (req, res) => {
 const listAllCommunities = asyncHandler(async (req, res) => {
     const { page = 1, limit = 10 } = req.query;
 
-    // Pagination options
+    // Pagination options for aggregatePaginate
     const options = {
         page: parseInt(page, 10),
         limit: parseInt(limit, 10),
-        sort: { createdAt: -1 }, // Sort by creation date, newest first
+        sort: { createdAt: -1 },
     };
 
-    // Use Mongoose's `paginate` method
-    const communities = await Community.paginate({}, options);
+    // Use aggregate to retrieve communities with pagination
+    const communities = await Community.aggregatePaginate(
+        Community.aggregate([]), // Start with a basic aggregation
+        options
+    );
 
     return res
         .status(200)
