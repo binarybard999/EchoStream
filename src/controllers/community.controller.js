@@ -17,41 +17,55 @@ import { getSocketInstance } from "../utils/socket.js"; // Import Socket.io inst
  * @route POST /api/communities
  */
 const createCommunity = asyncHandler(async (req, res) => {
+    // Retrieve form data fields from req.body
     const { name, description } = req.body;
-    const avatarLocalPath = req.files?.avatar?.[0]?.path || null;
 
-    if (!name || !description) {
+    // Check for missing fields and throw an error if either is empty
+    if (!name?.trim() || !description?.trim()) {
         throw new ApiError(400, "Name and description are required.");
     }
 
-    // Define folder name for community-specific uploads
-    const communityFolder = `communities/${name}`;
+    // Create initial community entry in the database
+    let community = await Community.create({
+        name,
+        description,
+        owner: req.user._id, // Set the community owner to the current user
+    });
 
-    // Upload community avatar to Cloudinary if provided
-    let avatar = { url: "" };
+    // Use the community ID as a Cloudinary folder identifier
+    const communityFolder = `communities/${community._id}`;
+    const avatarLocalPath = req.files?.avatar?.[0]?.path || null;
+    let avatar = { url: "" }; // Default avatar
+
+    // Upload the avatar to Cloudinary if provided
     if (avatarLocalPath) {
         avatar = await uploadOnCloudinary(avatarLocalPath, communityFolder);
-        if (!avatar) {
+        if (!avatar?.url) {
             throw new ApiError(500, "Failed to upload avatar to Cloudinary.");
         }
     }
 
-    // Create the community in the database
-    const community = await Community.create({
-        name,
-        description,
-        owner: req.user._id,
-        avatar: avatar.url,
-    });
+    // Update community with avatar URL if an avatar was uploaded
+    community.avatar = avatar.url;
+    await community.save();
 
-    // Emit an event using Socket.io to update all clients
-    const io = getSocketInstance();
-    io.emit("newCommunity", community);
+    // Emit a socket event for real-time updates
+    try {
+        const io = getSocketInstance();
+        if (io) {
+            io.emit("newCommunity", community);
+        } else {
+            console.warn("Socket instance not found.");
+        }
+    } catch (socketError) {
+        console.error("Error emitting socket event:", socketError);
+    }
 
+    // Send response with created community data
     return res
         .status(201)
         .json(
-            new ApiResponse(200, community, "Community created successfully.")
+            new ApiResponse(201, community, "Community created successfully.")
         );
 });
 
