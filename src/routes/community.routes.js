@@ -5,6 +5,8 @@ import {
     deleteCommunity,
     addCommunityAvatar,
     joinCommunity,
+    getUserJoinedCommunities,
+    checkMembership,
     leaveCommunity,
     removeUserFromCommunity,
     makeAdmin,
@@ -36,6 +38,10 @@ router
 
 // Member management routes
 router.route("/:communityId/join").post(joinCommunity);
+
+router.route("/:communityId/check-membership").get(checkMembership);
+router.route("/joined").get(getUserJoinedCommunities);
+
 router.route("/:communityId/leave").post(leaveCommunity);
 router.route("/:communityId/remove/:userId").delete(removeUserFromCommunity);
 router.route("/:communityId/admin/make/:userId").patch(makeAdmin);

@@ -226,12 +226,20 @@ const joinCommunity = asyncHandler(async (req, res) => {
     }
 
     // Check if the user is already a member
-    if (
-        community.members.some(
-            (member) => member.user.toString() === req.user._id.toString()
-        )
-    ) {
-        throw new ApiError(400, "You are already a member of this community.");
+    const isMember = community.members.some(
+        (member) => member.user.toString() === req.user._id.toString()
+    );
+
+    if (isMember) {
+        return res
+            .status(200)
+            .json(
+                new ApiResponse(
+                    200,
+                    { alreadyJoined: true },
+                    "You are already a member of this community."
+                )
+            );
     }
 
     // Add the user to the community's members list
@@ -247,8 +255,58 @@ const joinCommunity = asyncHandler(async (req, res) => {
         .json(
             new ApiResponse(
                 200,
-                community,
+                { alreadyJoined: false, communityId },
                 "Joined the community successfully."
+            )
+        );
+});
+
+/**
+ * 5.1. Check if a user is a member of a community
+ * @route GET /api/communities/:communityId/membership
+ */
+const checkMembership = asyncHandler(async (req, res) => {
+    const { communityId } = req.params;
+
+    // Find the community by ID
+    const community = await Community.findById(communityId);
+    if (!community) {
+        throw new ApiError(404, "Community not found.");
+    }
+
+    // Check if the user is already a member
+    const isMember = community.members.some(
+        (member) => member.user.toString() === req.user._id.toString()
+    );
+
+    return res
+        .status(200)
+        .json(
+            new ApiResponse(
+                200,
+                { alreadyJoined: isMember },
+                "Membership status retrieved successfully."
+            )
+        );
+});
+
+/**
+ * 5.2. Get all communities that a specific user has joined
+ * @route GET /api/communities/joined
+ */
+const getUserJoinedCommunities = asyncHandler(async (req, res) => {
+    // Find all communities where the user is a member
+    const communities = await Community.find({ "members.user": req.user._id })
+        .select("name description avatar")
+        .lean();
+
+    return res
+        .status(200)
+        .json(
+            new ApiResponse(
+                200,
+                communities,
+                "Joined communities retrieved successfully."
             )
         );
 });
@@ -942,6 +1000,8 @@ export {
     deleteCommunity,
     addCommunityAvatar,
     joinCommunity,
+    checkMembership,
+    getUserJoinedCommunities,
     leaveCommunity,
     removeUserFromCommunity,
     makeAdmin,
