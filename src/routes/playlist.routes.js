@@ -7,6 +7,8 @@ import {
     getUserPlaylists,
     removeVideoFromPlaylist,
     updatePlaylist,
+    getAllPlaylists,
+    getCurrentUserPlaylists,
 } from "../controllers/playlist.controller.js";
 import { verifyJWT } from "../middlewares/auth.middleware.js";
 
@@ -15,6 +17,11 @@ const router = Router();
 router.use(verifyJWT); // Apply verifyJWT middleware to all routes in this file
 
 router.route("/").post(createPlaylist);
+
+// Route to get all playlists with pagination
+router.get("/", getAllPlaylists);
+
+router.get("/my-playlists", getCurrentUserPlaylists);
 
 router
     .route("/:playlistId")

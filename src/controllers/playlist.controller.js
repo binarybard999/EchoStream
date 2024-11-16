@@ -147,6 +147,50 @@ const updatePlaylist = asyncHandler(async (req, res) => {
         .json(new ApiResponse(200, playlist, "Playlist updated successfully."));
 });
 
+const getAllPlaylists = asyncHandler(async (req, res) => {
+    const { page = 1, limit = 10, query } = req.query;
+
+    // Initialize the filter object
+    const filter = {};
+    if (query) {
+        filter.name = { $regex: query, $options: "i" }; // Case-insensitive search by name
+    }
+
+    // Use aggregate with pagination
+    const playlists = await Playlist.aggregatePaginate(
+        Playlist.aggregate([{ $match: filter }]).lookup({
+            from: "videos", // Join with videos collection
+            localField: "videos",
+            foreignField: "_id",
+            as: "videos",
+        }),
+        {
+            page: parseInt(page, 10),
+            limit: parseInt(limit, 10),
+        }
+    );
+
+    return res
+        .status(200)
+        .json(new ApiResponse(200, playlists, "Playlists retrieved successfully."));
+});
+
+const getCurrentUserPlaylists = asyncHandler(async (req, res) => {
+    if (!req.user || !req.user._id) {
+        throw new ApiError(401, "User not authenticated.");
+    }
+
+    const playlists = await Playlist.find({ owner: req.user._id }).populate("videos");
+
+    if (!playlists || playlists.length === 0) {
+        throw new ApiError(404, "No playlists found for the current user.");
+    }
+
+    return res
+        .status(200)
+        .json(new ApiResponse(200, playlists, "Playlists retrieved successfully."));
+});
+
 export {
     createPlaylist,
     getUserPlaylists,
@@ -155,4 +199,6 @@ export {
     removeVideoFromPlaylist,
     deletePlaylist,
     updatePlaylist,
+    getAllPlaylists,
+    getCurrentUserPlaylists
 };
