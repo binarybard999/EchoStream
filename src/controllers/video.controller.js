@@ -10,7 +10,6 @@ import {
 import { ApiResponse } from "../utils/ApiResponse.js";
 
 const getAllVideos = asyncHandler(async (req, res) => {
-    // get all videos based on query, sort, pagination
     const {
         page = 1,
         limit = 10,
@@ -30,7 +29,7 @@ const getAllVideos = asyncHandler(async (req, res) => {
 
     // Apply userId filter if provided and valid
     if (userId && isValidObjectId(userId)) {
-        filter.owner = userId; // Filter by user ID if provided
+        filter.owner = mongoose.Types.ObjectId(userId); // Convert to ObjectId for matching
     }
 
     // Define sort options
@@ -39,7 +38,40 @@ const getAllVideos = asyncHandler(async (req, res) => {
 
     // Use aggregation with pagination
     const videos = await Video.aggregatePaginate(
-        Video.aggregate([{ $match: filter }]).sort(sortOptions),
+        Video.aggregate([
+            { $match: filter }, // Apply filters
+            {
+                $lookup: {
+                    from: "users", // Name of the user collection
+                    localField: "owner", // Field in the videos collection
+                    foreignField: "_id", // Field in the users collection
+                    as: "ownerDetails", // Alias for the joined data
+                },
+            },
+            {
+                $unwind: {
+                    path: "$ownerDetails",
+                    preserveNullAndEmptyArrays: true, // Allow videos without owners to be included
+                },
+            },
+            {
+                $project: {
+                    videoFile: 1,
+                    thumbnail: 1,
+                    title: 1,
+                    description: 1,
+                    duration: 1,
+                    views: 1,
+                    isPublished: 1,
+                    createdAt: 1,
+                    updatedAt: 1,
+                    categories: 1,
+                    tags: 1,
+                    "ownerDetails.username": 1, // Include only necessary owner fields
+                    "ownerDetails.avatar": 1,
+                },
+            },
+        ]).sort(sortOptions),
         {
             page: parseInt(page, 10),
             limit: parseInt(limit, 10),

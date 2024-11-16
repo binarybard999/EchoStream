@@ -476,6 +476,35 @@ const getWatchHistory = asyncHandler(async (req, res) => {
         );
 });
 
+const fetchUsers = asyncHandler(async (req, res) => {
+    const { page = 1, limit = 10 } = req.query;
+
+    const aggregateQuery = User.aggregate([
+        {
+            $project: {
+                username: 1,
+                email: 1,
+                fullName: 1,
+                avatar: 1,
+                coverImage: 1,
+                createdAt: 1,
+            },
+        },
+    ]);
+
+    const options = {
+        page: parseInt(page, 10),
+        limit: parseInt(limit, 10),
+        sort: { createdAt: -1 },
+    };
+
+    const result = await User.aggregatePaginate(aggregateQuery, options);
+
+    return res
+        .status(200)
+        .json(new ApiResponse(200, result, "Users fetched successfully."));
+});
+
 export {
     registerUser,
     loginUser,
@@ -488,4 +517,5 @@ export {
     updateUserCoverImage,
     getUserChannelProfile,
     getWatchHistory,
+    fetchUsers,
 };
