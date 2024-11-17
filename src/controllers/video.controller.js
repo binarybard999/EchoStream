@@ -135,57 +135,54 @@ const publishVideo = asyncHandler(async (req, res) => {
 });
 
 const getVideoById = asyncHandler(async (req, res) => {
-    // get video by id
-    // populate comments
-    // populate user
-    // populate likes
-    // populate dislikes
-    // populate shares
-    // populate views
-    // populate tags
-    // populate categories
-    // populate related videos
     const { videoId } = req.params;
 
     if (!isValidObjectId(videoId)) {
         throw new ApiError(400, "Invalid video ID");
     }
 
-    const video = await Video.findById(videoId).populate({
-        path: "owner",
-        select: "username fullName avatar",
-    });
-    // .populate({
-    //     path: "comments",
-    //     populate: { path: "user", select: "username avatar" },
-    // })
-    // .populate("likes", "username")
-    // .populate("dislikes", "username")
-    // .populate("shares", "username")
-    // .populate("views")
-    // .populate("tags")
-    // .populate("categories");
+    const video = await Video.findById(videoId)
+        .populate({
+            path: "owner",
+            select: "username fullName avatar", // Populate owner details
+        })
+        .populate({
+            path: "comments",
+            populate: {
+                path: "owner",
+                select: "username avatar", // Populate owner of each comment
+            },
+        });
 
     if (!video) {
         throw new ApiError(404, "Video not found");
     }
 
-    // Optional: Populate related videos based on similar tags or categories
-    // const relatedVideos = await Video.find({
-    //     _id: { $ne: videoId }, // Exclude the current video
-    //     tags: { $in: video.tags }, // Match similar tags
-    //     isPublished: true,
-    // })
-    //     .limit(5)
-    //     .select("title thumbnail");
-
     return res.status(200).json(
         new ApiResponse(
-            { video }, //{ video, relatedVideos },
+            {
+                video,
+                relatedVideos: await getRelatedVideos(video),
+            },
             "Video retrieved successfully"
         )
     );
 });
+
+// Helper function to fetch related videos based on tags or categories
+const getRelatedVideos = async (video) => {
+    const relatedVideos = await Video.find({
+        _id: { $ne: video._id }, // Exclude the current video
+        $or: [
+            { tags: { $in: video.tags } },
+            { categories: { $in: video.categories } },
+        ],
+        isPublished: true,
+    })
+        .limit(5)
+        .select("title thumbnail views");
+    return relatedVideos;
+};
 
 const updateVideo = asyncHandler(async (req, res) => {
     // Update video details like title, description, thumbnail

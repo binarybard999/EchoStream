@@ -4,11 +4,11 @@ import mongooseAggregatePaginate from "mongoose-aggregate-paginate-v2";
 const videoSchema = new Schema(
     {
         videoFile: {
-            type: String, //cloudinary service url
+            type: String, // Cloudinary service URL
             required: true,
         },
         thumbnail: {
-            type: String, //cloudinary service url
+            type: String, // Cloudinary service URL
             required: true,
         },
         title: {
@@ -20,7 +20,7 @@ const videoSchema = new Schema(
             required: true,
         },
         duration: {
-            type: Number, //sent with video data from cloudinary
+            type: Number, // Sent with video data from Cloudinary
             required: true,
         },
         views: {
@@ -31,13 +31,19 @@ const videoSchema = new Schema(
             type: Boolean,
             default: true,
         },
+        comments: [
+            {
+                type: mongoose.Schema.Types.ObjectId,
+                ref: "Comment", // Refers to Comment model
+            },
+        ],
         owner: {
             type: Schema.Types.ObjectId,
-            ref: "User",
+            ref: "User", // Refers to User model
         },
         categories: [
             {
-                type: String, // Categories like "coding", "sports", "gaming", etc.
+                type: String, // Categories
                 enum: [
                     "coding",
                     "sports",
@@ -48,6 +54,9 @@ const videoSchema = new Schema(
                     "food",
                     "education",
                     "lifestyle",
+                    "technology",
+                    "fitness",
+                    "health",
                 ],
             },
         ],
