@@ -11,6 +11,27 @@ import {
 } from "../utils/fileUploadCloudinary.js";
 import { getSocketInstance } from "../utils/socket.js"; // Import Socket.io instance
 
+const handleFileUpload = async (localFilePath, folder) => {
+    try {
+        const response = await uploadOnCloudinary(localFilePath, folder);
+        if (!response || !response.url) {
+            throw new Error("Failed to upload file to Cloudinary.");
+        }
+        return response.url;
+    } catch (error) {
+        console.error(
+            `Error during file upload to Cloudinary: ${error.message}`
+        );
+        throw new ApiError(500, "File upload failed.");
+    } finally {
+        try {
+            if (localFilePath) fs.unlinkSync(localFilePath);
+        } catch (unlinkError) {
+            console.error(`Error removing local file: ${unlinkError.message}`);
+        }
+    }
+};
+
 // Core Functions for Community Management
 /**
  * 1. Create a new community
@@ -521,47 +542,46 @@ const revokeAdmin = asyncHandler(async (req, res) => {
 // Chat Management Functions
 /**
  * 10. Send a chat message in a community
- * @route POST /api/communities/:communityId/message
+ * @route POST /api/community/:communityId/message
  */
 const sendMessage = asyncHandler(async (req, res) => {
     const { communityId } = req.params;
     const { content } = req.body;
     const userId = req.user._id;
 
-    // Check if the community exists
+    // Validate community existence
     const community = await Community.findById(communityId);
     if (!community) {
         throw new ApiError(404, "Community not found.");
     }
 
-    // Check if the user is a member of the community
-    if (
-        !community.members.some(
-            (member) => member.user.toString() === userId.toString()
-        )
-    ) {
+    // Check membership
+    const isMember = community.members.some(
+        (member) => member.user.toString() === userId.toString()
+    );
+    if (!isMember) {
         throw new ApiError(403, "You are not a member of this community.");
     }
 
-    // Handle optional file uploads
+    // Handle file uploads
     let imageUrl = null;
     let videoUrl = null;
-    if (req.files?.image) {
-        const imageUpload = await uploadOnCloudinary(
+
+    if (req.files?.image?.[0]?.path) {
+        imageUrl = await handleFileUpload(
             req.files.image[0].path,
             `communities/${communityId}/images`
         );
-        imageUrl = imageUpload.url;
     }
-    if (req.files?.video) {
-        const videoUpload = await uploadOnCloudinary(
+
+    if (req.files?.video?.[0]?.path) {
+        videoUrl = await handleFileUpload(
             req.files.video[0].path,
             `communities/${communityId}/videos`
         );
-        videoUrl = videoUpload.url;
     }
 
-    // Create the chat message
+    // Create chat message
     const chatMessage = await Chat.create({
         community: communityId,
         sender: userId,
@@ -570,13 +590,21 @@ const sendMessage = asyncHandler(async (req, res) => {
         video: videoUrl,
     });
 
+    // Populate sender details for real-time broadcast
+    const populatedMessage = await chatMessage.populate(
+        "sender",
+        "username avatar"
+    );
+
     // Notify all members in real-time
     const io = getSocketInstance();
-    io.to(communityId).emit("newMessage", chatMessage);
+    io.to(communityId).emit("newMessage", populatedMessage);
 
     return res
         .status(201)
-        .json(new ApiResponse(201, chatMessage, "Message sent successfully."));
+        .json(
+            new ApiResponse(201, populatedMessage, "Message sent successfully.")
+        );
 });
 
 /**
@@ -625,7 +653,7 @@ const deleteMessage = asyncHandler(async (req, res) => {
 
 /**
  * 12. Get chat messages in a community
- * @route GET /api/communities/:communityId/messages
+ * @route GET /api/community/:communityId/messages
  */
 const getCommunityChats = asyncHandler(async (req, res) => {
     const { communityId } = req.params;
@@ -823,127 +851,109 @@ const listAllCommunities = asyncHandler(async (req, res) => {
 // Media Management Functions
 /**
  * 18. Upload Image to Chat
- * @route POST /api/communities/:communityId/chat/upload-image
+ * @route POST /api/community/:communityId/chat/upload-image
  * @desc Handles the upload of images in a chat message
  */
 const uploadImageToChat = asyncHandler(async (req, res) => {
     const { communityId } = req.params;
     const userId = req.user._id;
-    const imageFilePath = req.files?.image?.[0]?.path;
+    // console.log(req.file);
+    // const imageFilePath = req.files?.image?.[0]?.path;
+    const imageFilePath = req.file?.path;
 
     if (!imageFilePath) {
         throw new ApiError(400, "Image file is required.");
     }
 
-    // Check if the community exists
+    // Validate community existence
     const community = await Community.findById(communityId);
     if (!community) {
         throw new ApiError(404, "Community not found.");
     }
 
-    // Check if the user is a member of the community
-    if (
-        !community.members.some(
-            (member) => member.user.toString() === userId.toString()
-        )
-    ) {
+    // Check membership
+    const isMember = community.members.some(
+        (member) => member.user.toString() === userId.toString()
+    );
+    if (!isMember) {
         throw new ApiError(403, "You are not a member of this community.");
     }
 
     // Upload the image to Cloudinary
-    const imageUpload = await uploadOnCloudinary(
+    const imageUrl = await handleFileUpload(
         imageFilePath,
         `communities/${communityId}/images`
     );
-    if (!imageUpload) {
-        throw new ApiError(500, "Failed to upload image to Cloudinary.");
-    }
 
-    // Create a new chat message in the database
+    // Create a new chat message
     const chatMessage = await Chat.create({
         community: communityId,
         sender: userId,
-        image: imageUpload.url,
+        image: imageUrl,
     });
 
-    // Emit the new message to all members of the community via socket.io
+    // Emit the new message to all members via socket.io
     const io = getSocketInstance();
-    io.to(communityId).emit("newMessage", {
-        message: chatMessage,
-        type: "image",
-    });
+    io.to(communityId).emit("newMessage", chatMessage);
 
     return res
         .status(200)
         .json(
-            new ApiResponse(
-                200,
-                { imageUrl: imageUpload.url },
-                "Image uploaded successfully."
-            )
+            new ApiResponse(200, chatMessage, "Image uploaded successfully.")
         );
 });
 
 /**
  * 19. Upload Video to Chat
- * @route POST /api/communities/:communityId/chat/upload-video
+ * @route POST /api/community/:communityId/chat/upload-video
  * @desc Handles the upload of small videos in a chat message
  */
 const uploadVideoToChat = asyncHandler(async (req, res) => {
     const { communityId } = req.params;
     const userId = req.user._id;
-    const videoFilePath = req.files?.video?.[0]?.path;
+    // console.log(req.file);
+    // const videoFilePath = req.files?.video?.[0]?.path;
+    const videoFilePath = req.file?.path;
 
     if (!videoFilePath) {
         throw new ApiError(400, "Video file is required.");
     }
 
-    // Check if the community exists
+    // Validate community existence
     const community = await Community.findById(communityId);
     if (!community) {
         throw new ApiError(404, "Community not found.");
     }
 
-    // Check if the user is a member of the community
-    if (
-        !community.members.some(
-            (member) => member.user.toString() === userId.toString()
-        )
-    ) {
+    // Check membership
+    const isMember = community.members.some(
+        (member) => member.user.toString() === userId.toString()
+    );
+    if (!isMember) {
         throw new ApiError(403, "You are not a member of this community.");
     }
 
     // Upload the video to Cloudinary
-    const videoUpload = await uploadOnCloudinary(
+    const videoUrl = await handleFileUpload(
         videoFilePath,
         `communities/${communityId}/videos`
     );
-    if (!videoUpload) {
-        throw new ApiError(500, "Failed to upload video to Cloudinary.");
-    }
 
-    // Create a new chat message in the database
+    // Create a new chat message
     const chatMessage = await Chat.create({
         community: communityId,
         sender: userId,
-        video: videoUpload.url,
+        video: videoUrl,
     });
 
-    // Emit the new message to all members of the community via socket.io
+    // Emit the new message to all members via socket.io
     const io = getSocketInstance();
-    io.to(communityId).emit("newMessage", {
-        message: chatMessage,
-        type: "video",
-    });
+    io.to(communityId).emit("newMessage", chatMessage);
 
     return res
         .status(200)
         .json(
-            new ApiResponse(
-                200,
-                { videoUrl: videoUpload.url },
-                "Video uploaded successfully."
-            )
+            new ApiResponse(200, chatMessage, "Video uploaded successfully.")
         );
 });
 
