@@ -20,7 +20,7 @@ const getAllVideos = asyncHandler(async (req, res) => {
     } = req.query;
 
     // Initialize the filter object
-    const filter = {};
+    const filter = { isPublished: true }; // Only fetch published videos
 
     // Apply search query filter if provided
     if (query) {
@@ -51,7 +51,7 @@ const getAllVideos = asyncHandler(async (req, res) => {
             {
                 $unwind: {
                     path: "$ownerDetails",
-                    preserveNullAndEmptyArrays: true, // Allow videos without owners to be included
+                    preserveNullAndEmptyArrays: false, // Only include videos with valid owners
                 },
             },
             {
@@ -62,7 +62,6 @@ const getAllVideos = asyncHandler(async (req, res) => {
                     description: 1,
                     duration: 1,
                     views: 1,
-                    isPublished: 1,
                     createdAt: 1,
                     updatedAt: 1,
                     categories: 1,
@@ -81,6 +80,29 @@ const getAllVideos = asyncHandler(async (req, res) => {
     return res
         .status(200)
         .json(new ApiResponse(videos, {}, "Videos retrieved successfully"));
+});
+
+const getUserVideos = asyncHandler(async (req, res) => {
+    const userId = req.user._id;
+
+    // Fetch videos for the authenticated user
+    const userVideos = await Video.find({ owner: userId }).sort({
+        createdAt: -1,
+    });
+
+    if (!userVideos || userVideos.length === 0) {
+        throw new ApiError(404, "No videos found for this user.");
+    }
+
+    return res
+        .status(200)
+        .json(
+            new ApiResponse(
+                200,
+                userVideos,
+                "User videos retrieved successfully."
+            )
+        );
 });
 
 const publishVideo = asyncHandler(async (req, res) => {
@@ -185,44 +207,69 @@ const getRelatedVideos = async (video) => {
 };
 
 const updateVideo = asyncHandler(async (req, res) => {
-    // Update video details like title, description, thumbnail
     const { videoId } = req.params;
 
+    // Validate video ID
     if (!isValidObjectId(videoId)) {
         throw new ApiError(400, "Invalid video ID");
     }
 
-    const { title, description } = req.body;
+    // Extract updates from the request body
+    const { title, description, categories, tags } = req.body;
 
-    // Define folder name for user-specific uploads
+    // Validate that at least one field is being updated
+    if (
+        !title &&
+        !description &&
+        !req.files?.thumbnail &&
+        !categories &&
+        !tags
+    ) {
+        throw new ApiError(400, "No update data provided");
+    }
+
+    // Define folder name for uploads
     const userFolder = `users/${req.user.username}/videos`;
 
-    // Check if a new thumbnail is uploaded
-    const thumbnail = req.files?.thumbnail ? req.files.thumbnail[0].path : null;
+    // Handle thumbnail upload if provided
     let thumbnailUrl = null;
-
-    if (thumbnail) {
-        const thumbnailUploadResponse = await uploadOnCloudinary(
-            thumbnail,
-            userFolder
-        );
-        if (!thumbnailUploadResponse) {
+    if (req.files?.thumbnail?.[0]?.path) {
+        try {
+            const thumbnailUploadResponse = await uploadOnCloudinary(
+                req.files.thumbnail[0].path,
+                userFolder
+            );
+            thumbnailUrl = thumbnailUploadResponse?.url || null;
+        } catch (error) {
+            console.error("Thumbnail upload error:", error);
             throw new ApiError(
                 500,
                 "Failed to upload new thumbnail to Cloudinary"
             );
         }
-        thumbnailUrl = thumbnailUploadResponse.url;
     }
 
+    // Construct update data object dynamically
     const updateData = {
         ...(title && { title }),
         ...(description && { description }),
         ...(thumbnailUrl && { thumbnail: thumbnailUrl }),
+        ...(categories && {
+            categories: Array.isArray(categories)
+                ? categories
+                : categories.split(",").map((c) => c.trim()),
+        }),
+        ...(tags && {
+            tags: Array.isArray(tags)
+                ? tags
+                : tags.split(",").map((t) => t.trim()),
+        }),
     };
 
+    // Update video
     const updatedVideo = await Video.findByIdAndUpdate(videoId, updateData, {
-        new: true,
+        new: true, // Return the updated document
+        runValidators: true, // Ensure validators are applied
     });
 
     if (!updatedVideo) {
@@ -367,6 +414,7 @@ const getVideosByCategory = asyncHandler(async (req, res) => {
 
 export {
     getAllVideos,
+    getUserVideos,
     publishVideo,
     getVideoById,
     updateVideo,
