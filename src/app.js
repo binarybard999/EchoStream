@@ -41,6 +41,7 @@ import likeRouter from "./routes/like.routes.js";
 import playlistRouter from "./routes/playlist.routes.js";
 import dashboardRouter from "./routes/dashboard.routes.js";
 import communityRouter from "./routes/community.routes.js";
+import aiRouter from "./routes/ai.routes.js";
 
 // routes middleware
 app.use("/api/v1/healthcheck", healthcheckRouter);
@@ -53,5 +54,6 @@ app.use("/api/v1/likes", likeRouter);
 app.use("/api/v1/playlists", playlistRouter);
 app.use("/api/v1/dashboard", dashboardRouter);
 app.use("/api/v1/community", communityRouter);
+app.use("/api/v1/ai", aiRouter);
 
 export { app, httpServer };

@@ -215,14 +215,14 @@ const updateVideo = asyncHandler(async (req, res) => {
     }
 
     // Extract updates from the request body
-    const { title, description, categories, tags } = req.body;
+    const { title, description, category, tags } = req.body;
 
     // Validate that at least one field is being updated
     if (
         !title &&
         !description &&
         !req.files?.thumbnail &&
-        !categories &&
+        !category &&
         !tags
     ) {
         throw new ApiError(400, "No update data provided");
@@ -254,11 +254,12 @@ const updateVideo = asyncHandler(async (req, res) => {
         ...(title && { title }),
         ...(description && { description }),
         ...(thumbnailUrl && { thumbnail: thumbnailUrl }),
-        ...(categories && {
-            categories: Array.isArray(categories)
-                ? categories
-                : categories.split(",").map((c) => c.trim()),
-        }),
+        ...(category && { category: category }),
+        // ...(categories && {
+        //     categories: Array.isArray(categories)
+        //         ? categories
+        //         : categories.split(",").map((c) => c.trim()),
+        // }),
         ...(tags && {
             tags: Array.isArray(tags)
                 ? tags

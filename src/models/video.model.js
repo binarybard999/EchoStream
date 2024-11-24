@@ -41,8 +41,7 @@ const videoSchema = new Schema(
             type: Schema.Types.ObjectId,
             ref: "User", // Refers to User model
         },
-        categories: [
-            {
+        category:{
                 type: String, // Categories
                 enum: [
                     "coding",
@@ -68,7 +67,6 @@ const videoSchema = new Schema(
                     "nature",
                 ],
             },
-        ],
         tags: [
             {
                 type: String, // Tags for search and filtering
