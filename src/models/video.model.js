@@ -41,32 +41,32 @@ const videoSchema = new Schema(
             type: Schema.Types.ObjectId,
             ref: "User", // Refers to User model
         },
-        category:{
-                type: String, // Categories
-                enum: [
-                    "coding",
-                    "sports",
-                    "gaming",
-                    "music",
-                    "news",
-                    "travel",
-                    "food",
-                    "education",
-                    "lifestyle",
-                    "technology",
-                    "fitness",
-                    "health",
-                    "fashion",
-                    "art",
-                    "photography",
-                    "finance",
-                    "history",
-                    "movies",
-                    "science",
-                    "books",
-                    "nature",
-                ],
-            },
+        category: {
+            type: String, // Categories
+            enum: [
+                "coding",
+                "sports",
+                "gaming",
+                "music",
+                "news",
+                "travel",
+                "food",
+                "education",
+                "lifestyle",
+                "technology",
+                "fitness",
+                "health",
+                "fashion",
+                "art",
+                "photography",
+                "finance",
+                "history",
+                "movies",
+                "science",
+                "books",
+                "nature",
+            ],
+        },
         tags: [
             {
                 type: String, // Tags for search and filtering

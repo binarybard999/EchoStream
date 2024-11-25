@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { getAiGeneratedContent } from "../controllers/ai.controller.js";
+import { generateAiContent } from "../controllers/ai.controller.js";
 import { verifyJWT } from "../middlewares/auth.middleware.js";
 
 const router = Router();
@@ -8,6 +8,6 @@ const router = Router();
 router.use(verifyJWT);
 
 // Route to handle AI content generation
-router.post("/generate", getAiGeneratedContent);
+router.post("/generate", generateAiContent);
 
 export default router;

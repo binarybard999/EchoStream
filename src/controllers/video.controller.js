@@ -197,7 +197,7 @@ const getRelatedVideos = async (video) => {
         _id: { $ne: video._id }, // Exclude the current video
         $or: [
             { tags: { $in: video.tags } },
-            { categories: { $in: video.categories } },
+            { category: { $in: video.category } },
         ],
         isPublished: true,
     })
