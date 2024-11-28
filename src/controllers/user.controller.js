@@ -95,15 +95,21 @@ const registerUser = asyncHandler(async (req, res) => {
 });
 
 const loginUser = asyncHandler(async (req, res) => {
-    const { email, username, password } = req.body;
+    // const { email, username, password } = req.body;
+    const { identifier, password } = req.body;
 
-    if (!(email || username)) {
+    // if (!(email || username)) {
+    if (!identifier) {
         throw new ApiError(400, "Username or email is required.");
     }
 
-    const user = await User.findOne({
-        $or: [{ username }, { email }],
-    });
+    // const user = await User.findOne({
+    //     $or: [{ username }, { email }],
+    // });
+
+    const user = identifier.includes("@")
+        ? await User.findOne({ email: identifier })
+        : await User.findOne({ username: identifier });
 
     if (!user) {
         throw new ApiError(404, "User does not exist.");
@@ -219,6 +225,8 @@ const refreshAccessToken = asyncHandler(async (req, res) => {
 
 const changeCurrentPassword = asyncHandler(async (req, res) => {
     const { oldPassword, newPassword } = req.body;
+    // console.log(req.body.oldPassword);
+    // console.log(req.body.newPassword);
 
     // Ensure user is loaded and has a password
     const user = await User.findById(req.user?._id);
@@ -249,7 +257,7 @@ const getCurrentUser = asyncHandler(async (req, res) => {
 });
 
 const updateAccountDetails = asyncHandler(async (req, res) => {
-    const { fullName, email } = req.body;
+    const { fullName, email, description } = req.body;
 
     if (!fullName || !email) {
         throw new ApiError(400, "All fields are required.");
@@ -261,6 +269,7 @@ const updateAccountDetails = asyncHandler(async (req, res) => {
             $set: {
                 fullName,
                 email: email.toLowerCase(),
+                description: description || "",
             },
         },
         { new: true }
@@ -402,6 +411,7 @@ const getUserChannelProfile = asyncHandler(async (req, res) => {
                 avatar: 1,
                 coverImage: 1,
                 email: 1,
+                description: 1,
                 createdAt: 1,
             },
         },
