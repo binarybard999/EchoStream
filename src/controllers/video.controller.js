@@ -107,7 +107,12 @@ const getUserVideos = asyncHandler(async (req, res) => {
 
 const publishVideo = asyncHandler(async (req, res) => {
     // Get video, upload to Cloudinary, create video
-    const { title, description } = req.body;
+    const { title, description, category, tags } = req.body;
+    // console.log(req.body.title);
+    // console.log(req.body.description);
+    // console.log(req.body.category);
+    // console.log(req.body.tags);
+    // console.log(req.files);
     const userId = req.user._id; // Assuming you are using JWT authentication and have user info in req.user
 
     if (!title || !description || !req.files) {
@@ -118,6 +123,8 @@ const publishVideo = asyncHandler(async (req, res) => {
     }
 
     const { videoFile, thumbnail } = req.files;
+    // console.log(req.files.videoFile);
+    // console.log(req.files.thumbnail);
 
     // Define folder name for user-specific uploads
     const userFolder = `users/${req.user.username}/videos`;
@@ -143,6 +150,8 @@ const publishVideo = asyncHandler(async (req, res) => {
     const videoData = {
         title,
         description,
+        category,
+        tags,
         videoFile: videoUploadResponse.url,
         thumbnail: thumbnailUploadResponse.url,
         duration: videoUploadResponse.duration || 0, // Optional: depends on Cloudinary response
