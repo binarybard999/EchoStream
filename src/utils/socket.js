@@ -105,12 +105,11 @@ export const initializeSocket = (httpServer) => {
             console.log(`User left community: ${communityId}`);
         });
 
-        // Handle user joining an anonymous community
+        // Anonymous community event handlers
         socket.on("joinAnonCommunity", (data) => {
             const { communityName, username } = data;
-
             if (!communityName || !username) {
-                console.error("Community name and username are required.");
+                console.error("Missing community name or username.");
                 return;
             }
 
@@ -119,23 +118,18 @@ export const initializeSocket = (httpServer) => {
                 .toLowerCase();
             socket.join(sanitizedCommunityName);
 
-            console.log(
-                `User ${username} joined community: ${sanitizedCommunityName}`
-            );
             io.to(sanitizedCommunityName).emit("userJoined", {
                 username,
                 message: `${username} has joined the community.`,
             });
+            console.log(`User ${username} joined: ${sanitizedCommunityName}`);
         });
 
         // Handle sending an anonymous chat message
         socket.on("sendAnonMessage", (data) => {
             const { communityName, username, content } = data;
-
             if (!communityName || !username || !content) {
-                console.error(
-                    "Community name, username, and message content are required."
-                );
+                console.error("Invalid message data.");
                 return;
             }
 
@@ -148,34 +142,27 @@ export const initializeSocket = (httpServer) => {
                 timestamp: new Date(),
             };
 
-            // Broadcast the message to the community
             io.to(sanitizedCommunityName).emit("newAnonMessage", message);
-            console.log("Message sent:", message);
+            console.log("Broadcast message:", message);
         });
 
         // Handle user leaving an anonymous community
         socket.on("leaveAnonCommunity", (data) => {
             const { communityName, username } = data;
-
-            if (!communityName || !username) {
-                console.error(
-                    "Community name and username are required to leave."
-                );
-                return;
-            }
-
             const sanitizedCommunityName = communityName
                 .replace(/\s+/g, "_")
                 .toLowerCase();
-            socket.leave(sanitizedCommunityName);
 
-            console.log(
-                `User ${username} left community: ${sanitizedCommunityName}`
-            );
+            socket.leave(sanitizedCommunityName);
             io.to(sanitizedCommunityName).emit("userLeft", {
                 username,
                 message: `${username} has left the community.`,
             });
+            console.log(`User ${username} left: ${sanitizedCommunityName}`);
+        });
+
+        socket.on("disconnect", () => {
+            console.log("Client disconnected:", socket.id);
         });
 
         // Handle disconnection

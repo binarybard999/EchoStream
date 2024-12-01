@@ -52,7 +52,7 @@ export const sendMessage = asyncHandler(async (req, res) => {
     };
 
     const io = getSocketInstance();
-    io.to(sanitizedCommunityName).emit("anonymousMessage", message);
+    io.to(sanitizedCommunityName).emit("sendAnonMessage", message);
 
     return res
         .status(201)
