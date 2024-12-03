@@ -21,16 +21,18 @@ export const initializeSocket = (httpServer) => {
     io.on("connection", (socket) => {
         console.log("New client connected:", socket.id);
 
+        // === Normal Community Event Handlers ===
+
         // Handle user joining a community
         socket.on("joinCommunity", async (communityId) => {
             try {
-                // Check if the community exists
                 const community = await Community.findById(communityId);
                 if (!community) {
-                    console.error(`Community with ID ${communityId} not found`);
+                    console.error(
+                        `Community with ID ${communityId} not found.`
+                    );
                     return;
                 }
-
                 socket.join(communityId);
                 console.log(`User joined community: ${communityId}`);
             } catch (error) {
@@ -38,16 +40,17 @@ export const initializeSocket = (httpServer) => {
             }
         });
 
-        // Handle user sending a chat message
+        // Handle user sending a normal chat message
         socket.on("sendMessage", async (data) => {
             const { communityId, content, senderId, imageFile, videoFile } =
                 data;
 
             try {
-                // Check if the community exists
                 const community = await Community.findById(communityId);
                 if (!community) {
-                    console.error(`Community with ID ${communityId} not found`);
+                    console.error(
+                        `Community with ID ${communityId} not found.`
+                    );
                     return;
                 }
 
@@ -72,7 +75,6 @@ export const initializeSocket = (httpServer) => {
                     videoUrl = videoUpload.url;
                 }
 
-                // Create and save the chat message in MongoDB
                 const newChat = new Chat({
                     content,
                     image: imageUrl,
@@ -83,7 +85,6 @@ export const initializeSocket = (httpServer) => {
 
                 await newChat.save();
 
-                // Broadcast the new message to all members of the community
                 io.to(communityId).emit("newMessage", {
                     _id: newChat._id,
                     content,
@@ -105,11 +106,14 @@ export const initializeSocket = (httpServer) => {
             console.log(`User left community: ${communityId}`);
         });
 
-        // Anonymous community event handlers
+        // === Anonymous Community Event Handlers ===
+
+        // Handle user joining an anonymous community
         socket.on("joinAnonCommunity", (data) => {
             const { communityName, username } = data;
+
             if (!communityName || !username) {
-                console.error("Missing community name or username.");
+                console.error("Community name and username are required.");
                 return;
             }
 
@@ -118,18 +122,23 @@ export const initializeSocket = (httpServer) => {
                 .toLowerCase();
             socket.join(sanitizedCommunityName);
 
+            console.log(
+                `User ${username} joined anonymous community: ${sanitizedCommunityName}`
+            );
             io.to(sanitizedCommunityName).emit("userJoined", {
                 username,
                 message: `${username} has joined the community.`,
             });
-            console.log(`User ${username} joined: ${sanitizedCommunityName}`);
         });
 
         // Handle sending an anonymous chat message
         socket.on("sendAnonMessage", (data) => {
             const { communityName, username, content } = data;
+
             if (!communityName || !username || !content) {
-                console.error("Invalid message data.");
+                console.error(
+                    "Community name, username, and message content are required."
+                );
                 return;
             }
 
@@ -143,29 +152,35 @@ export const initializeSocket = (httpServer) => {
             };
 
             io.to(sanitizedCommunityName).emit("newAnonMessage", message);
-            console.log("Broadcast message:", message);
+            console.log("Anonymous message sent:", message);
         });
 
         // Handle user leaving an anonymous community
         socket.on("leaveAnonCommunity", (data) => {
             const { communityName, username } = data;
+
+            if (!communityName || !username) {
+                console.error(
+                    "Community name and username are required to leave."
+                );
+                return;
+            }
+
             const sanitizedCommunityName = communityName
                 .replace(/\s+/g, "_")
                 .toLowerCase();
-
             socket.leave(sanitizedCommunityName);
+
             io.to(sanitizedCommunityName).emit("userLeft", {
                 username,
                 message: `${username} has left the community.`,
             });
-            console.log(`User ${username} left: ${sanitizedCommunityName}`);
+            console.log(
+                `User ${username} left anonymous community: ${sanitizedCommunityName}`
+            );
         });
 
-        socket.on("disconnect", () => {
-            console.log("Client disconnected:", socket.id);
-        });
-
-        // Handle disconnection
+        // Handle client disconnection
         socket.on("disconnect", () => {
             console.log("Client disconnected:", socket.id);
         });

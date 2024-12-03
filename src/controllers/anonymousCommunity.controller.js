@@ -16,6 +16,12 @@ export const createOrJoinCommunity = asyncHandler(async (req, res) => {
         .toLowerCase();
     const sanitizedUsername = username.replace(/\s+/g, "_").toLowerCase();
 
+    // Log for debugging
+    console.log(
+        `Community: ${sanitizedCommunityName}, Username: ${sanitizedUsername}`
+    );
+
+    // Response for joining/creating a community
     return res.status(200).json(
         new ApiResponse(
             200,
@@ -31,7 +37,7 @@ export const createOrJoinCommunity = asyncHandler(async (req, res) => {
 export const sendMessage = asyncHandler(async (req, res) => {
     const { communityName, username, content } = req.body;
 
-    if (!communityName || !username || !content) {
+    if (!communityName || !username || !content.trim()) {
         throw new ApiError(
             400,
             "Community name, username, and message content are required."
@@ -44,16 +50,20 @@ export const sendMessage = asyncHandler(async (req, res) => {
         .toLowerCase();
     const sanitizedUsername = username.replace(/\s+/g, "_").toLowerCase();
 
+    // Prepare the message
     const message = {
         communityName: sanitizedCommunityName,
         username: sanitizedUsername,
         content,
-        timestamp: new Date(),
+        timestamp: new Date().toISOString(),
     };
 
+    // Broadcast message via socket
     const io = getSocketInstance();
-    io.to(sanitizedCommunityName).emit("sendAnonMessage", message);
+    io.to(sanitizedCommunityName).emit("newAnonMessage", message);
+    console.log(`Message sent to ${sanitizedCommunityName}:`, message);
 
+    // Respond with the sent message
     return res
         .status(201)
         .json(new ApiResponse(201, message, "Message sent successfully."));
